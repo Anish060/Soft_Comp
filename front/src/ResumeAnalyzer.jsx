@@ -30,7 +30,7 @@ const ResumeAnalyzer = () => {
       const formData = new FormData();
       formData.append('pdfFile', file);
 
-      const response = await fetch('http://localhost:3000/analyze-pdf', {
+      const response = await fetch('http://localhost:8000/analyze-pdf', {
         method: 'POST',
         body: formData,
       });
@@ -102,8 +102,8 @@ const ResumeAnalyzer = () => {
         {feedback && !loading && (
           <div className="mt-8">
             <h2 className="text-2xl font-bold mb-6 text-gray-800">Analysis Results</h2>
-            {feedback.ollamaResponse && 
-              <AnalysisSection ollamaResponse={feedback.ollamaResponse} />
+            {feedback.analysis && 
+              <AnalysisSection ollamaResponse={feedback.analysis} />
             }
           </div>
         )}
