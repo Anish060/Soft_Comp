@@ -1,103 +1,49 @@
-/* =========================
-   Resume Analyzer Styles
-   ========================= */
-
-/* Page background fallback */
 @import "tailwindcss";
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 body {
-  background-color: #f3f4f6; /* gray-100 */
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #F8FAFC;
 }
 
-/* Card hover enhancement */
-.bg-gray-50 {
-  transition: box-shadow 0.3s ease, transform 0.3s ease;
+#root {
+  width: 100%;
 }
 
-.bg-gray-50:hover {
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
-    0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  transform: translateY(-2px);
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-/* Upload area animation */
-.border-dashed {
-  transition: border-color 0.3s ease, background-color 0.3s ease;
+/* Custom transitions */
+.transition-layout {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.border-dashed:hover {
-  border-color: #2563eb; /* blue-600 */
-  background-color: #eff6ff; /* blue-50 */
-}
-
-/* File name appearance */
-.text-gray-600 {
-  word-break: break-word;
-}
-
-/* Button loading smoothness */
-button:disabled {
-  cursor: not-allowed;
-}
-
-/* Error message subtle animation */
-.bg-red-50 {
-  animation: fadeIn 0.3s ease-in-out;
-}
-
-/* Results section fade-in */
-.mt-8 {
-  animation: slideUp 0.4s ease-out;
-}
-
-/* Spinner alignment fix */
-svg.animate-spin {
-  animation: spin 1s linear infinite;
-}
-
-/* =========================
-   Animations
-   ========================= */
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* =========================
-   Responsive Tweaks
-   ========================= */
-
-@media (max-width: 640px) {
-  .text-3xl {
-    font-size: 1.75rem;
-  }
-
-  .p-8 {
-    padding: 1.5rem;
-  }
+/* Glass effect */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
