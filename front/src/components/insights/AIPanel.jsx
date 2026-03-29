@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Zap, 
   Target, 
@@ -12,13 +12,15 @@ import {
   AlertTriangle,
   Info,
   ArrowRight,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useResumeStore from '../../store/useResumeStore';
 import { cn } from '../../utils/cn';
 import PeerComparisonChart from '../charts/PeerComparisonChart';
 import { useAIService } from '../../services/aiService';
+import ErrorBoundary from '../common/ErrorBoundary';
 
 const Sparkles = ({ className, size }) => (
   <svg 
@@ -104,7 +106,11 @@ const AIPanel = () => {
               transition={{ duration: 0.2 }}
             >
               {activeTab === 'insights' && <InsightsView data={analysis} />}
-              {activeTab === 'editor' && <EditorView data={analysis} />}
+              {activeTab === 'editor' && (
+                <ErrorBoundary key="editor-boundary">
+                  <EditorView data={analysis} />
+                </ErrorBoundary>
+              )}
               {activeTab === 'heatmap' && <HeatmapView data={analysis} />}
               {activeTab === 'comparison' && <ComparisonView data={analysis} />}
               {activeTab === 'cover' && <CoverLetterView data={analysis} />}
@@ -258,64 +264,308 @@ const InsightsView = ({ data }) => (
   </div>
 );
 
-const EditorView = ({ data }) => (
-  <div className="space-y-6">
-    <SectionTitle title="Live AI Reasoning" />
-    <div className="space-y-4 mt-3">
-      {data.line_suggestions?.length > 0 ? data.line_suggestions.map((s, i) => (
-        <div key={i} className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm group">
-          <div className="p-3 bg-red-50/50 border-b border-red-50 flex items-center gap-2">
-            <X size={14} className="text-red-400" />
-            <p className="text-xs text-red-700 line-through truncate">{s.original}</p>
-          </div>
-          <div className="p-4 bg-green-50/30">
-            <div className="flex items-start gap-2 mb-3">
-              <CheckCircle2 size={16} className="text-green-600 shrink-0 mt-0.5" />
-              <p className="text-sm font-semibold text-slate-800 leading-tight">{s.rewrite}</p>
-            </div>
-            <div className="bg-white/60 p-2 rounded-lg border border-green-100/50 mb-4">
-              <p className="text-[11px] text-slate-500 italic flex items-center gap-1">
-                <Info size={12} className="text-slate-400" />
-                {s.reason}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <button className="flex-1 bg-green-600 text-white text-xs py-2 rounded-lg font-bold hover:bg-green-700 transition-colors">
-                Accept
-              </button>
-              <button className="px-3 border border-slate-200 text-xs py-2 rounded-lg hover:bg-slate-50 font-medium">
-                Reject
-              </button>
-            </div>
-          </div>
+const EditorView = ({ data }) => {
+  const [mode, setMode] = useState('manual');
+  
+  // Default templates
+  const resumeTemplate = `\\documentclass{article}
+\\usepackage[utf8]{inputenc}
+
+\\title{Resume}
+\\author{Your Name}
+\\date{\\today}
+
+\\begin{document}
+
+\\maketitle
+
+\\section{Summary}
+Experienced professional with a strong background in software development.
+
+\\section{Experience}
+\\textbf{Company A} - Developer \\\\
+Worked on cool projects.
+
+\\end{document}`;
+
+  const abstractTemplate = `\\section{Abstract}
+Resume screening systems are increasingly being automated...
+
+\\section{Introduction}
+The rise of online recruitment platforms has made...`;
+
+  const getTemplate = (page) => {
+    if (page === 1) return resumeTemplate;
+    if (page === 2) return abstractTemplate;
+    return `\\section{New Section (Page ${page})}\nStart writing content for page ${page} here...`;
+  };
+
+  // State to hold content for each page
+  const [pageBuffers, setPageBuffers] = useState({ 1: resumeTemplate });
+  const [isCompiling, setIsCompiling] = useState(false);
+  const [compileError, setCompileError] = useState(null);
+  const [isConverting, setIsConverting] = useState(false);
+  // Optimize selectors to avoid re-renders on unrelated store changes
+  const setFile = useResumeStore(s => s.setFile);
+  const pageText = useResumeStore(s => s.pageText);
+  const currentPage = useResumeStore(s => s.currentPage);
+
+  const handlePageContentChange = (newContent) => {
+    setPageBuffers(prev => ({
+      ...prev,
+      [currentPage]: newContent
+    }));
+  };
+
+  // Auto-generate LaTeX code for current page if empty
+  useEffect(() => {
+    // Only auto-generate if we have text but no buffer for this page yet
+    if (pageText && !pageBuffers[currentPage] && !isConverting) {
+       console.log("Auto-generating LaTeX for page", currentPage);
+       handleConvertToLatex();
+    }
+  }, [currentPage, pageText]);
+
+  const handleCompile = async () => {
+    setIsCompiling(true);
+    setCompileError(null);
+    try {
+      // Stitching logic
+      let fullLatex = pageBuffers[1] || resumeTemplate;
+      
+      // Combine other pages
+      const otherPagesContent = Object.keys(pageBuffers)
+        .filter(p => parseInt(p) > 1)
+        .sort((a, b) => parseInt(a) - parseInt(b))
+        .map(p => `\\newpage\n${pageBuffers[p]}`)
+        .join('\n');
+
+      if (otherPagesContent) {
+        // Insert before \end{document}
+        if (fullLatex.includes('\\end{document}')) {
+          fullLatex = fullLatex.replace('\\end{document}', `\n${otherPagesContent}\n\\end{document}`);
+        } else {
+          fullLatex += `\n${otherPagesContent}`;
+        }
+      }
+
+      console.log("Compiling stitched LaTeX:", fullLatex);
+
+      const response = await fetch('http://localhost:8000/render-tex', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latex: fullLatex })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.details || err.error || 'Compilation failed');
+      }
+
+      const blob = await response.blob();
+      const newFile = new File([blob], "edited_resume.pdf", { type: "application/pdf" });
+      setFile(newFile);
+    } catch (err) {
+      setCompileError(err.message);
+    } finally {
+      setIsCompiling(false);
+    }
+  };
+
+  const handleConvertToLatex = async () => {
+    if (!pageText) return;
+    setIsConverting(true);
+    // When converting, we replace the buffer for the CURRENT page
+    handlePageContentChange(`% Generating LaTeX for Page ${currentPage}... Please wait.`);
+    
+    try {
+      const response = await fetch('http://localhost:8000/generate-latex-from-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: pageText })
+      });
+      
+      const data = await response.json();
+      if (data.latex) {
+        // Update ONLY the current page buffer
+        setPageBuffers(prev => ({ ...prev, [currentPage]: data.latex }));
+      }
+    } catch (error) {
+       console.error(error);
+       handlePageContentChange('% Error generating LaTeX. Please try again.');
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
+  // Ensure current page has content
+  const currentCode = pageBuffers[currentPage] !== undefined 
+    ? pageBuffers[currentPage] 
+    : getTemplate(currentPage);
+
+  // Sync initialization if needed (optional, but good for stability)
+  if (pageBuffers[currentPage] === undefined) {
+      // Use setTimeout to avoid render loop warning, or just rely on the fallback above.
+      // Since 'currentCode' uses the fallback, the textarea will show it.
+      // But we should probably Initialize it in the state so it can be edited.
+      // However, calling setState during render is bad.
+      // We'll let the onChange handler initialize it effectively.
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex bg-slate-100 p-1 rounded-lg">
+        <button
+          onClick={() => setMode('manual')}
+          className={cn(
+            "flex-1 py-1.5 text-xs font-bold rounded-md transition-all",
+            mode === 'manual' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-600"
+          )}
+        >
+          Manual LaTeX Editor
+        </button>
+        <button
+          onClick={() => setMode('ai')}
+          className={cn(
+            "flex-1 py-1.5 text-xs font-bold rounded-md transition-all",
+            mode === 'ai' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-600"
+          )}
+        >
+          AI Suggestions
+        </button>
+      </div>
+
+      {mode === 'manual' ? (
+        <div className="space-y-4">
+           <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Editing Page {currentPage} Source
+              </span>
+              {currentPage > 1 && (
+                 <span className="text-[10px] text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
+                    Fragment Mode
+                 </span>
+              )}
+           </div>
+
+           {pageText && (
+             <button 
+               onClick={handleConvertToLatex}
+               disabled={isConverting}
+               className="w-full py-2 bg-indigo-50 text-indigo-600 text-xs font-bold rounded-lg border border-indigo-100 hover:bg-indigo-100 flex items-center justify-center gap-2 mb-2"
+             >
+               {isConverting ? <Loader2 className="animate-spin" size={14} /> : <FileText size={14} />}
+               Regenerate Logic for Page {currentPage}
+             </button>
+           )}
+
+           <div className="relative">
+             <textarea
+               value={currentCode}
+               onChange={(e) => handlePageContentChange(e.target.value)}
+               className="w-full h-96 p-4 font-mono text-xs bg-slate-900 text-slate-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+               spellCheck="false"
+               placeholder={`Enter LaTeX code for page ${currentPage}...`}
+             />
+             <div className="absolute bottom-4 right-4 flex gap-2">
+                <button
+                  onClick={() => handlePageContentChange('')}
+                  className="px-3 py-1.5 bg-slate-800 text-slate-400 text-xs font-bold rounded-lg hover:bg-slate-700"
+                >
+                  Clear
+                </button>
+             </div>
+           </div>
+
+           {compileError && (
+             <div className="p-3 bg-red-50 text-red-600 text-xs rounded-lg border border-red-200">
+               <strong>Error:</strong> {compileError}
+             </div>
+           )}
+
+           <button
+             onClick={handleCompile}
+             disabled={isCompiling}
+             className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+           >
+             {isCompiling ? (
+               <>
+                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                 Compiling Full PDF...
+               </>
+             ) : (
+               <>
+                 <Edit3 size={16} />
+                 Compile & Update Preview
+               </>
+             )}
+           </button>
+           
+           <p className="text-[10px] text-slate-400 text-center">
+             Note: Updates all pages. Uses Cloud Compiler.
+           </p>
         </div>
-      )) : (
-        <div className="p-8 border border-dashed border-slate-200 rounded-2xl text-center">
-           <p className="text-xs text-slate-400 italic">No line rewriting suggestions available for this section.</p>
+      ) : (
+        <div className="space-y-6">
+          <SectionTitle title="Live AI Reasoning" />
+          <div className="space-y-4 mt-3">
+            {data.line_suggestions?.length > 0 ? data.line_suggestions.map((s, i) => (
+              <div key={i} className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm group">
+                <div className="p-3 bg-red-50/50 border-b border-red-50 flex items-center gap-2">
+                  <X size={14} className="text-red-400" />
+                  <p className="text-xs text-red-700 line-through truncate">{s.original}</p>
+                </div>
+                <div className="p-4 bg-green-50/30">
+                  <div className="flex items-start gap-2 mb-3">
+                    <CheckCircle2 size={16} className="text-green-600 shrink-0 mt-0.5" />
+                    <p className="text-sm font-semibold text-slate-800 leading-tight">{s.rewrite}</p>
+                  </div>
+                  <div className="bg-white/60 p-2 rounded-lg border border-green-100/50 mb-4">
+                    <p className="text-[11px] text-slate-500 italic flex items-center gap-1">
+                      <Info size={12} className="text-slate-400" />
+                      {s.reason}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="flex-1 bg-green-600 text-white text-xs py-2 rounded-lg font-bold hover:bg-green-700 transition-colors">
+                      Accept
+                    </button>
+                    <button className="px-3 border border-slate-200 text-xs py-2 rounded-lg hover:bg-slate-50 font-medium">
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )) : (
+              <div className="p-8 border border-dashed border-slate-200 rounded-2xl text-center">
+                 <p className="text-xs text-slate-400 italic">No line rewriting suggestions available for this section.</p>
+              </div>
+            )}
+          </div>
+          
+          <div>
+            <SectionTitle title="Bias & Redundancy" />
+            <div className="space-y-2">
+              {data.biases?.map((b, i) => (
+                <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/50">
+                  <div>
+                    <p className="text-xs font-bold text-slate-700">"{b.word}"</p>
+                    <p className="text-[10px] text-slate-400">Type: {b.type}</p>
+                  </div>
+                  <ArrowRight size={14} className="text-slate-300" />
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-blue-600">{b.suggestion}</p>
+                    <p className="text-[10px] text-blue-400">Neutral Alternative</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
-    
-    <div>
-      <SectionTitle title="Bias & Redundancy" />
-      <div className="space-y-2">
-        {data.biases?.map((b, i) => (
-          <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/50">
-            <div>
-              <p className="text-xs font-bold text-slate-700">"{b.word}"</p>
-              <p className="text-[10px] text-slate-400">Type: {b.type}</p>
-            </div>
-            <ArrowRight size={14} className="text-slate-300" />
-            <div className="text-right">
-              <p className="text-xs font-bold text-blue-600">{b.suggestion}</p>
-              <p className="text-[10px] text-blue-400">Neutral Alternative</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  </div>
-);
+  );
+};
 
 const HeatmapView = ({ data }) => (
   <div className="space-y-6">
