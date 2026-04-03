@@ -6,7 +6,7 @@ import { useAIService } from '../../services/aiService';
 import { motion } from 'framer-motion';
 
 const ResumeUpload = () => {
-  const { setFile, file, reset } = useResumeStore();
+  const setFile = useResumeStore((state) => state.setFile);
   const { analyzeResume } = useAIService();
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
@@ -51,28 +51,9 @@ const ResumeUpload = () => {
     }, 40);
   };
 
-  if (file) {
-    return (
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-bottom-2">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
-            <File size={20} />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-slate-700">{file.name}</p>
-            <p className="text-xs text-slate-400">{(file.size / 1024).toFixed(1)} KB • Ready for analysis</p>
-          </div>
-        </div>
-        <button 
-          onClick={reset}
-          className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-lg transition-colors"
-        >
-          <X size={18} />
-        </button>
-      </div>
-    );
-  }
-
+  // Dashboard handles visibility based on file presence. 
+  // We don't need to render a success state here as it will be unmounted.
+  
   return (
     <div className="w-full max-w-xl mx-auto">
       <div 

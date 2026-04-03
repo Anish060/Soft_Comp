@@ -59,6 +59,9 @@ export const useAIService = () => {
 
       if (response.data.success) {
         setAnalysis(response.data.analysis);
+        if (response.data.text) {
+           useResumeStore.getState().setPdfText(response.data.text);
+        }
       }
     } catch (error) {
       console.error('Analysis failed:', error);

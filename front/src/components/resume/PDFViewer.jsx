@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2, Flame } from 'lucide-react';
 import useResumeStore from '../../store/useResumeStore';
@@ -9,14 +9,31 @@ import 'react-pdf/dist/Page/TextLayer.css';
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 const PDFViewer = () => {
-  const { file, analysis, heatmapVisible, toggleHeatmap } = useResumeStore();
+  const { file, analysis, heatmapVisible, toggleHeatmap, currentPage, setPage, setPdfDocument, setPageText, pdfDocument } = useResumeStore();
   const [numPages, setNumPages] = useState(null);
-  const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
 
-  function onDocumentLoadSuccess({ numPages }) {
-    setNumPages(numPages);
+  function onDocumentLoadSuccess(pdf) {
+    setNumPages(pdf.numPages);
+    setPdfDocument(pdf);
   }
+
+  useEffect(() => {
+    const extractPageText = async () => {
+      if (!pdfDocument || !currentPage) return;
+      try {
+        const page = await pdfDocument.getPage(currentPage);
+        const textContent = await page.getTextContent();
+        const text = textContent.items.map(item => item.str).join(' ');
+        console.log(`Extracted text for page ${currentPage}:`, text.slice(0, 50) + "...");
+        setPageText(text);
+      } catch (error) {
+        console.error("Error extracting page text:", error);
+      }
+    };
+
+    extractPageText();
+  }, [pdfDocument, currentPage, setPageText]);
 
   return (
     <div className="flex flex-col items-center gap-6 relative">
@@ -24,18 +41,18 @@ const PDFViewer = () => {
       <div className="sticky top-4 z-20 flex items-center gap-4 bg-white/90 backdrop-blur-xl px-6 py-3 rounded-[24px] shadow-2xl shadow-slate-200/50 border border-white">
         <div className="flex items-center gap-2 border-r border-slate-100 pr-4">
           <button 
-            onClick={() => setPageNumber(prev => Math.max(prev - 1, 1))}
-            disabled={pageNumber <= 1}
+            onClick={() => setPage(Math.max(currentPage - 1, 1))}
+            disabled={currentPage <= 1}
             className="p-1.5 hover:bg-slate-100 rounded-xl disabled:opacity-30 transition-colors"
           >
             <ChevronLeft size={20} />
           </button>
           <span className="text-xs font-black text-slate-800 tracking-tighter min-w-[60px] text-center">
-            PAGE {pageNumber} OF {numPages || '--'}
+            PAGE {currentPage} OF {numPages || '--'}
           </span>
           <button 
-            onClick={() => setPageNumber(prev => Math.min(prev + 1, numPages))}
-            disabled={pageNumber >= numPages}
+            onClick={() => setPage(Math.min(currentPage + 1, numPages))}
+            disabled={currentPage >= numPages}
             className="p-1.5 hover:bg-slate-100 rounded-xl disabled:opacity-30 transition-colors"
           >
             <ChevronRight size={20} />
@@ -78,7 +95,7 @@ const PDFViewer = () => {
           }
         >
           <Page 
-            pageNumber={pageNumber} 
+            pageNumber={currentPage} 
             scale={scale} 
             renderAnnotationLayer={true}
             renderTextLayer={true}
